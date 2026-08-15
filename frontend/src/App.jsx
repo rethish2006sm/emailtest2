@@ -1,286 +1,159 @@
 import { useState } from "react";
 
-
-// ======================================
-// BACKEND URL
-// ======================================
-
 // LOCAL:
 // http://localhost:5000
-
-// RENDER:
+//
+// DEPLOYED:
+// Set VITE_API_URL in the frontend host to your backend URL, for example:
 // https://your-backend-name.onrender.com
 
-
 const BACKEND_URL =
+    import.meta.env.VITE_API_URL ||
     import.meta.env.VITE_BACKEND_URL ||
     (window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1"
         ? "http://localhost:5000"
-        : window.location.origin);
+        : "");
 
+async function readApiResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+        return response.json();
+    }
+
+    const text = await response.text();
+
+    return {
+        success: false,
+        message: text || "Server returned a non-JSON response",
+        raw: text
+    };
+}
 
 function App() {
-
     const [receiver, setReceiver] = useState("");
-
-    const [subject, setSubject] = useState(
-        "Test Email from React"
-    );
-
+    const [subject, setSubject] = useState("Test Email from React");
     const [message, setMessage] = useState(
         "Hello! This email was sent using React + Node.js + Python."
     );
-
     const [loading, setLoading] = useState(false);
-
     const [result, setResult] = useState("");
-
     const [success, setSuccess] = useState(false);
 
+    const resolveErrorMessage = (data, fallback) =>
+        data?.error?.message ||
+        data?.message ||
+        data?.raw ||
+        fallback;
 
-    // ======================================
-    // SEND EMAIL
-    // ======================================
+    const requireBackendUrl = () => {
+        if (!BACKEND_URL) {
+            throw new Error(
+                "Backend URL is missing. Set VITE_API_URL to your deployed backend URL."
+            );
+        }
+    };
 
     const sendEmail = async () => {
-
         setResult("");
-
         setSuccess(false);
 
-
-        // -------------------------------
-        // VALIDATION
-        // -------------------------------
-
-        if (
-            !receiver ||
-            !subject ||
-            !message
-        ) {
-
-            setResult(
-                "❌ Please fill all fields."
-            );
-
+        if (!receiver || !subject || !message) {
+            setResult("Please fill all fields.");
             return;
-
         }
-
 
         setLoading(true);
-
-        setResult(
-            "📧 Sending email..."
-        );
-
+        setResult("Sending email...");
 
         try {
+            requireBackendUrl();
 
-            console.log(
-                "Backend:",
-                BACKEND_URL
-            );
+            console.log("Backend:", BACKEND_URL);
 
+            const response = await fetch(`${BACKEND_URL}/send-email`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    receiver,
+                    subject,
+                    message
+                })
+            });
 
-            const response = await fetch(
-                `${BACKEND_URL}/send-email`,
-                {
-                    method: "POST",
+            const data = await readApiResponse(response);
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        receiver: receiver,
-
-                        subject: subject,
-
-                        message: message
-
-                    })
-                }
-            );
-
-
-            const data =
-                await response.json();
-
-
-            console.log(
-                "Backend response:",
-                data
-            );
-
+            console.log("Backend response:", data);
 
             if (!response.ok) {
-
                 throw new Error(
-                    data.error ||
-                    data.message ||
-                    `Server error: ${response.status}`
-                );
-
-            }
-
-
-            if (data.success) {
-
-                setSuccess(true);
-
-                setResult(
-                    "✅ Email sent successfully!"
-                );
-
-                setReceiver("");
-
-            } else {
-
-                setResult(
-                    "❌ " +
-                    (
-                        data.error ||
-                        data.message ||
-                        "Email failed"
+                    resolveErrorMessage(
+                        data,
+                        `Server error: ${response.status}`
                     )
                 );
-
             }
 
-
+            if (data.success) {
+                setSuccess(true);
+                setResult("Email sent successfully!");
+                setReceiver("");
+            } else {
+                setResult(`Error: ${resolveErrorMessage(data, "Email failed")}`);
+            }
         } catch (error) {
-
-            console.error(
-                "Email error:",
-                error
-            );
-
-
+            console.error("Email error:", error);
             setSuccess(false);
-
-            setResult(
-                "❌ " + error.message
-            );
-
-
+            setResult(`Error: ${error.message}`);
         } finally {
-
             setLoading(false);
-
         }
-
     };
-
-
-    // ======================================
-    // TEST BACKEND
-    // ======================================
 
     const testBackend = async () => {
-
         try {
+            requireBackendUrl();
 
-            const response =
-                await fetch(
-                    `${BACKEND_URL}/`
-                );
+            const response = await fetch(`${BACKEND_URL}/`);
+            const data = await readApiResponse(response);
 
-
-            const data =
-                await response.json();
-
-
-            console.log(
-                "Backend test:",
-                data
-            );
-
-
-            alert(
-                data.message
-            );
-
-
+            console.log("Backend test:", data);
+            alert(data.message || "Backend test succeeded");
         } catch (error) {
-
             console.error(error);
-
-            alert(
-                "❌ Backend is not reachable"
-            );
-
+            alert(`Backend is not reachable: ${error.message}`);
         }
-
     };
-
-
-    // ======================================
-    // TEST PYTHON
-    // ======================================
 
     const testPython = async () => {
-
         try {
+            requireBackendUrl();
 
-            const response =
-                await fetch(
-                    `${BACKEND_URL}/test-python`
-                );
+            const response = await fetch(`${BACKEND_URL}/test-python`);
+            const data = await readApiResponse(response);
 
-
-            const data =
-                await response.json();
-
-
-            console.log(
-                "Python test:",
-                data
-            );
-
+            console.log("Python test:", data);
 
             if (data.success) {
-
-                alert(
-                    "✅ Python is working!\n\n" +
-                    data.output
-                );
-
+                alert(`Python is working!\n\n${data.output || ""}`);
             } else {
-
                 alert(
-                    "❌ Python problem:\n\n" +
-                    (
-                        data.error ||
-                        data.message
-                    )
+                    `Python problem:\n\n${resolveErrorMessage(
+                        data,
+                        "Unknown error"
+                    )}`
                 );
-
             }
-
-
         } catch (error) {
-
             console.error(error);
-
-            alert(
-                "❌ Cannot connect to backend"
-            );
-
+            alert(`Cannot connect to backend: ${error.message}`);
         }
-
     };
 
-
-    // ======================================
-    // UI
-    // ======================================
-
     return (
-
         <div
             style={{
                 minHeight: "100vh",
@@ -292,30 +165,19 @@ function App() {
                 fontFamily: "Arial"
             }}
         >
+            <div
+                style={{
+                    width: "100%",
+                    maxWidth: "600px",
+                    background: "white",
+                    padding: "clamp(18px, 4vw, 30px)",
+                    borderRadius: "12px",
+                    boxShadow: "0 4px 20px rgba(0,0,0,0.1)"
+                }}
+            >
+                <h1>Email Sender</h1>
 
-                <div
-                    style={{
-                        width: "100%",
-                        maxWidth: "600px",
-                        background: "white",
-                        padding: "clamp(18px, 4vw, 30px)",
-                        borderRadius: "12px",
-                        boxShadow:
-                            "0 4px 20px rgba(0,0,0,0.1)"
-                    }}
-                >
-
-                <h1>
-                    📧 Email Sender
-                </h1>
-
-
-                <p>
-                    React → Node.js → Python → Gmail
-                </p>
-
-
-                {/* BACKEND TEST */}
+                <p>React to Node.js to Python to Gmail</p>
 
                 <button
                     onClick={testBackend}
@@ -328,9 +190,6 @@ function App() {
                     Test Backend
                 </button>
 
-
-                {/* PYTHON TEST */}
-
                 <button
                     onClick={testPython}
                     style={{
@@ -341,22 +200,13 @@ function App() {
                     Test Python
                 </button>
 
-
-                {/* RECEIVER */}
-
-                <label>
-                    Receiver Email
-                </label>
+                <label>Receiver Email</label>
 
                 <input
                     type="email"
                     placeholder="receiver@gmail.com"
                     value={receiver}
-                    onChange={(e) =>
-                        setReceiver(
-                            e.target.value
-                        )
-                    }
+                    onChange={(e) => setReceiver(e.target.value)}
                     style={{
                         width: "100%",
                         boxSizing: "border-box",
@@ -366,21 +216,12 @@ function App() {
                     }}
                 />
 
-
-                {/* SUBJECT */}
-
-                <label>
-                    Subject
-                </label>
+                <label>Subject</label>
 
                 <input
                     type="text"
                     value={subject}
-                    onChange={(e) =>
-                        setSubject(
-                            e.target.value
-                        )
-                    }
+                    onChange={(e) => setSubject(e.target.value)}
                     style={{
                         width: "100%",
                         boxSizing: "border-box",
@@ -390,21 +231,12 @@ function App() {
                     }}
                 />
 
-
-                {/* MESSAGE */}
-
-                <label>
-                    Message
-                </label>
+                <label>Message</label>
 
                 <textarea
                     rows="6"
                     value={message}
-                    onChange={(e) =>
-                        setMessage(
-                            e.target.value
-                        )
-                    }
+                    onChange={(e) => setMessage(e.target.value)}
                     style={{
                         width: "100%",
                         boxSizing: "border-box",
@@ -415,9 +247,6 @@ function App() {
                     }}
                 />
 
-
-                {/* SEND BUTTON */}
-
                 <button
                     onClick={sendEmail}
                     disabled={loading}
@@ -425,41 +254,26 @@ function App() {
                         width: "100%",
                         padding: "14px",
                         fontSize: "16px",
-                        cursor: loading
-                            ? "not-allowed"
-                            : "pointer"
+                        cursor: loading ? "not-allowed" : "pointer"
                     }}
                 >
-
-                    {loading
-                        ? "Sending..."
-                        : "Send Email 📧"}
-
+                    {loading ? "Sending..." : "Send Email"}
                 </button>
 
-
-                {/* RESULT */}
-
                 {result && (
-
                     <p
                         style={{
                             marginTop: "20px",
-                            fontWeight: "bold"
+                            fontWeight: "bold",
+                            color: success ? "#0a7b34" : "#b00020"
                         }}
                     >
                         {result}
                     </p>
-
                 )}
-
             </div>
-
         </div>
-
     );
-
 }
-
 
 export default App;
