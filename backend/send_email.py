@@ -3,6 +3,7 @@ import smtplib
 import ssl
 import sys
 import traceback
+import socket
 from email.message import EmailMessage
 
 
@@ -32,6 +33,66 @@ def is_truthy(value):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def decode_smtp_message(message):
+    if isinstance(message, bytes):
+        return message.decode("utf-8", errors="replace")
+    return str(message)
+
+
+def connect_smtp_via_ipv4(smtp_host, smtp_port, timeout):
+    try:
+        address_info = socket.getaddrinfo(
+            smtp_host,
+            smtp_port,
+            family=socket.AF_INET,
+            type=socket.SOCK_STREAM
+        )
+    except socket.gaierror as error:
+        raise RuntimeError(
+            f"Failed to resolve IPv4 address for {smtp_host}: {error}"
+        ) from error
+
+    if not address_info:
+        raise RuntimeError(
+            f"No IPv4 address found for SMTP host {smtp_host}"
+        )
+
+    errors = []
+
+    for family, socktype, proto, _, sockaddr in address_info:
+        ip_address, port = sockaddr[0], sockaddr[1]
+        server = smtplib.SMTP(timeout=timeout)
+
+        try:
+            code, message = server.connect(ip_address, port)
+            server._host = smtp_host
+
+            print(
+                f"SMTP IPv4 connection attempt: {ip_address}:{port} -> {code} {decode_smtp_message(message)}",
+                flush=True
+            )
+
+            if code != 220:
+                raise RuntimeError(
+                    f"SMTP server returned unexpected response {code}: {decode_smtp_message(message)}"
+                )
+
+            return server, ip_address
+
+        except Exception as error:
+            errors.append(f"{ip_address}:{port} -> {error}")
+
+            try:
+                server.close()
+            except Exception:
+                pass
+
+    raise RuntimeError(
+        "Unable to connect to SMTP host via IPv4. "
+        + " | ".join(errors)
+    )
+
+
 def send_email(receiver, subject, body):
     sender_email = require_env("SENDER_EMAIL")
     app_password = require_env("APP_PASSWORD")
@@ -46,6 +107,7 @@ def send_email(receiver, subject, body):
     print(f"STARTTLS: {use_starttls}", flush=True)
     print(f"Sender: {sender_email}", flush=True)
     print(f"Receiver: {receiver}", flush=True)
+    print("Resolving SMTP host through IPv4...", flush=True)
 
     email = EmailMessage()
     email["From"] = sender_email
@@ -55,7 +117,16 @@ def send_email(receiver, subject, body):
 
     context = ssl.create_default_context()
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
+    server = None
+
+    try:
+        server, connected_ip = connect_smtp_via_ipv4(
+            smtp_host,
+            smtp_port,
+            timeout
+        )
+
+        print(f"Connected to SMTP IPv4: {connected_ip}", flush=True)
         server.set_debuglevel(0)
         server.ehlo()
 
@@ -70,7 +141,17 @@ def send_email(receiver, subject, body):
         print("Sending email...", flush=True)
         server.send_message(email)
 
-    print("EMAIL_SENT", flush=True)
+        print("EMAIL_SENT", flush=True)
+
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                try:
+                    server.close()
+                except Exception:
+                    pass
 
 
 def check_configuration():
