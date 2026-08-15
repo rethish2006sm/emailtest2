@@ -1,0 +1,2 @@
+# No third-party Python dependencies are required.
+# The email sender uses only Python standard library modules.

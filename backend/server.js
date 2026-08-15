@@ -25,12 +25,17 @@ function sendErrorResponse(res, statusCode, code, message, details = null) {
 }
 
 function getPythonCommand() {
-    return process.platform === "win32" ? "python" : "python3";
+    return process.env.PYTHON_BINARY || (process.platform === "win32" ? "python" : "python3");
 }
 
 function spawnPython(args) {
     return spawn(getPythonCommand(), args, {
-        env: process.env
+        cwd: __dirname,
+        env: {
+            ...process.env,
+            PYTHONUNBUFFERED: "1",
+            PYTHONIOENCODING: "utf-8"
+        }
     });
 }
 
@@ -59,11 +64,17 @@ app.get("/", (req, res) => {
 // ===============================
 
 app.get("/test-python", (req, res) => {
-    const python = spawnPython(["--version"]);
+    const pythonCommand = getPythonCommand();
+    const pythonFile = path.resolve(__dirname, "send_email.py");
+    const python = spawnPython([pythonFile, "--check"]);
 
     let output = "";
     let errorOutput = "";
     let responded = false;
+
+    console.log("Python test command:", pythonCommand);
+    console.log("Python test cwd:", __dirname);
+    console.log("Python test file:", pythonFile);
 
     python.stdout.on("data", (data) => {
         output += data.toString();
@@ -87,6 +98,8 @@ app.get("/test-python", (req, res) => {
             "PYTHON_START_FAILED",
             "Python could not be started",
             {
+                command: pythonCommand,
+                cwd: __dirname,
                 message: error.message
             }
         );
@@ -101,12 +114,17 @@ app.get("/test-python", (req, res) => {
         console.log("Python test finished:", code);
 
         if (code !== 0) {
+            console.error("Python test stdout:", output.trim());
+            console.error("Python test stderr:", errorOutput.trim());
+
             return sendErrorResponse(
                 res,
                 500,
                 "PYTHON_TEST_FAILED",
                 "Python test failed",
                 {
+                    command: pythonCommand,
+                    cwd: __dirname,
                     exitCode: code,
                     stdout: output,
                     stderr: errorOutput
@@ -117,7 +135,7 @@ app.get("/test-python", (req, res) => {
         return res.json({
             success: true,
             platform: process.platform,
-            pythonCommand: getPythonCommand(),
+            pythonCommand,
             output,
             error: errorOutput
         });
@@ -146,12 +164,17 @@ app.post("/send-email", (req, res) => {
         );
     }
 
-    const pythonFile = path.join(__dirname, "send_email.py");
+    const pythonCommand = getPythonCommand();
+    const pythonFile = path.resolve(__dirname, "send_email.py");
     const python = spawnPython([pythonFile, receiver, subject, message]);
 
     let output = "";
     let errorOutput = "";
     let responded = false;
+
+    console.log("Python command:", pythonCommand);
+    console.log("Python cwd:", __dirname);
+    console.log("Python file:", pythonFile);
 
     python.stdout.on("data", (data) => {
         const text = data.toString();
@@ -179,6 +202,8 @@ app.post("/send-email", (req, res) => {
             "PYTHON_START_FAILED",
             "Could not start Python",
             {
+                command: pythonCommand,
+                cwd: __dirname,
                 message: error.message
             }
         );
@@ -191,8 +216,8 @@ app.post("/send-email", (req, res) => {
 
         responded = true;
         console.log("Python exit code:", code);
-        console.log("Python output:", output);
-        console.log("Python error:", errorOutput);
+        console.log("Python stdout:", output.trim());
+        console.log("Python stderr:", errorOutput.trim());
 
         if (code === 0 && output.includes("EMAIL_SENT")) {
             console.log("Email sent successfully");
@@ -209,6 +234,8 @@ app.post("/send-email", (req, res) => {
             "EMAIL_SEND_FAILED",
             "Python failed to send email",
             {
+                command: pythonCommand,
+                cwd: __dirname,
                 exitCode: code,
                 stdout: output,
                 stderr: errorOutput
