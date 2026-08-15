@@ -14,7 +14,10 @@ import { useState } from "react";
 
 const BACKEND_URL =
     import.meta.env.VITE_BACKEND_URL ||
-    "http://localhost:5000";
+    (window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+        ? "http://localhost:5000"
+        : window.location.origin);
 
 
 function App() {
@@ -285,22 +288,22 @@ function App() {
                 justifyContent: "center",
                 alignItems: "center",
                 background: "#f4f6f8",
-                padding: "20px",
+                padding: "16px",
                 fontFamily: "Arial"
             }}
         >
 
-            <div
-                style={{
-                    width: "100%",
-                    maxWidth: "600px",
-                    background: "white",
-                    padding: "30px",
-                    borderRadius: "12px",
-                    boxShadow:
-                        "0 4px 20px rgba(0,0,0,0.1)"
-                }}
-            >
+                <div
+                    style={{
+                        width: "100%",
+                        maxWidth: "600px",
+                        background: "white",
+                        padding: "clamp(18px, 4vw, 30px)",
+                        borderRadius: "12px",
+                        boxShadow:
+                            "0 4px 20px rgba(0,0,0,0.1)"
+                    }}
+                >
 
                 <h1>
                     📧 Email Sender
@@ -318,6 +321,7 @@ function App() {
                     onClick={testBackend}
                     style={{
                         marginRight: "10px",
+                        marginBottom: "10px",
                         padding: "10px"
                     }}
                 >
